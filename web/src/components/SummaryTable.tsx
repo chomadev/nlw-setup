@@ -27,7 +27,8 @@ export function SummaryTable() {
                             key={`habitDay_${i}`}
                             isFuture={dayjs(date).isAfter(today)}
                             title="Beber agua"
-                            count={3} />
+                            amount={3}
+                            completed={3} />
                     )
                 }
             </div>

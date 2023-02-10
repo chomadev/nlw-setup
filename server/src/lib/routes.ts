@@ -8,9 +8,31 @@ export async function appRoutes(server: FastifyInstance) {
         const habits = await prisma.habit.findMany()
 
         reply.send({
-            status: 201,
+            status: 200,
             data: { habits }
         })
+    })
+
+    server.get('/api/summary', async (request, reply) => {
+        return await prisma.$queryRaw`
+            select
+                d.id,
+                d.date,
+                (
+                    select cast(count(*) as float)
+                    from day_habits DH
+                    where d.id = DH.day_id
+                ) as completed,
+                (
+                    select cast(count(*) as float)
+                    from habit_week_days HWD
+                    join habits H on H.id = HWD.habit_id
+                    where
+                        HWD.week_day = cast(strftime('%w', D.date/1000.0, 'unixepoch') as int)
+                        and H.created_at <= D.date
+                ) as amount
+            from days D
+        `
     })
 
     server.get('/api/habits_dashboard', async (request, reply) => {
@@ -18,15 +40,33 @@ export async function appRoutes(server: FastifyInstance) {
             select: {
                 date: true,
                 _count: {
-                    select: { habits: true }
+                    select: { dayHabits: true }
                 },
-                habits: {
-                    select: { habit: true }
+                dayHabits: {
+                    select: {
+                        // habit: true,
+                        habit: {
+                            select: {
+                                week_days: true,
+                                _count: {
+                                    select: {
+                                        week_days: true,
+                                    },
+                                }
+                            }
+                        }
+                    },
+                    // include: {
+                    //     habit: true,
+                    //     include: {
+                    //         habit: true,
+                    //     }
+                    // }
                 },
             },
         })
         reply.send({
-            status: 201,
+            status: 200,
             data: { days }
         })
     })
@@ -44,7 +84,7 @@ export async function appRoutes(server: FastifyInstance) {
         })
 
         reply.send({
-            status: 201,
+            status: 200,
             data: { habit }
         })
     })
@@ -78,24 +118,24 @@ export async function appRoutes(server: FastifyInstance) {
 
     server.get('/api/day', async (request, reply) => {
         const dayParams = z.object({
-            date: z.coerce.date()
+            date: z.coerce.date().optional()
         })
         const { date } = dayParams.parse(request.query)
 
-        const parsedDate = dayjs(date).startOf('day')
+        const parsedDate = (date ? dayjs(date) : dayjs()).startOf('day')
         const weekDay = parsedDate.get('day')
 
         const possibleHabits = await prisma.habit.findMany({
             where: {
                 created_at: {
-                    lte: date
+                    lte: parsedDate.toDate()
                 },
                 week_days: {
                     some: {
                         week_day: weekDay
                     }
                 }
-            },
+            }
         })
 
         const day = await prisma.day.findUnique({
@@ -103,14 +143,14 @@ export async function appRoutes(server: FastifyInstance) {
                 date: parsedDate.toDate(),
             },
             include: {
-                habits: true,
+                dayHabits: true,
             }
         })
 
         return reply.send({
             status: 200,
             data: {
-                completedHabits: day?.habits.map(h => h.id),
+                completedHabits: day?.dayHabits.map(h => h.id),
                 possibleHabits
             }
         })
@@ -134,6 +174,54 @@ export async function appRoutes(server: FastifyInstance) {
         })
     })
 
+    server.patch('/api/habits/:id/toggle', async (request, reply) => {
+        const toggleHabitParams = z.object({
+            id: z.string().uuid(),
+        })
+
+        const { id } = toggleHabitParams.parse(request.params)
+        const today = await dayjs().startOf('day').toDate()
+        let day = await prisma.day.findUnique({
+            where: {
+                date: today
+            }
+        })
+
+        if (!day) {
+            day = await prisma.day.create({
+                data: {
+                    date: today
+                }
+            })
+        }
+
+        const dayHabit = await prisma.dayHabit.findUnique({
+            where: {
+                day_id_habit_id: {
+                    day_id: day.id,
+                    habit_id: id,
+                }
+            }
+        });
+
+        if (!dayHabit) {
+            await prisma.dayHabit.create({
+                data: {
+                    day_id: day.id,
+                    habit_id: id,
+                }
+            })
+        } else {
+            await prisma.dayHabit.delete({
+                where: {
+                    day_id_habit_id: {
+                        day_id: day.id,
+                        habit_id: id,
+                    }
+                }
+            })
+        }
+    })
 
     server.post('/api/day_habit', async (request, reply) => {
         const createDayHabit = z.object({
