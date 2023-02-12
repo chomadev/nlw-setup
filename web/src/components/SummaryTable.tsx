@@ -1,12 +1,30 @@
-import { generateDatesFromStartOfYear } from "../utils/generate-dates-from-start-of-year"
-import { HabitDay } from "./HabitDay"
-import dayjs from "dayjs"
+import { generateDatesFromStartOfYear } from "../utils/generate-dates-from-start-of-year";
+import { HabitDay } from "./HabitDay";
+import dayjs from "dayjs";
+import { useEffect, useState } from "react";
+import { api } from "../lib/axios";
 
-const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
-const summaryDates = generateDatesFromStartOfYear()
+const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+const summaryDates = generateDatesFromStartOfYear();
 const today = dayjs();
 
+type Summary = Array<{
+    id: string,
+    date: string,
+    amount: number,
+    completed: number,
+}>;
+
 export function SummaryTable() {
+    const [summary, setSummary] = useState<Summary>();
+
+    useEffect(() => {
+        api.get('api/summary')
+            .then(response => {
+                setSummary(response.data);
+            })
+    }, [])
+
     return (
         <div className="w-full flex">
             <div className="grid grid-rows-7 grid-flow-row gap-3">
@@ -22,14 +40,14 @@ export function SummaryTable() {
             </div>
             <div className="grid grid-rows-7 grid-flow-col gap-3">
                 {
-                    summaryDates.map((date, i) =>
-                        <HabitDay
+                    summaryDates.map((date, i) => {
+                        const dayInSummary = summary?.find(day => dayjs(date).isSame(day.date, 'day'))
+                        return <HabitDay
                             key={`habitDay_${i}`}
-                            isFuture={dayjs(date).isAfter(today)}
-                            title="Beber agua"
-                            amount={3}
-                            completed={3} />
-                    )
+                            date={date}
+                            amount={dayInSummary?.amount || 0}
+                            completed={dayInSummary?.completed || 0} />
+                    })
                 }
             </div>
         </div>
