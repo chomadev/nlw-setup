@@ -6,17 +6,16 @@ import { api } from "../lib/axios";
 
 const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const summaryDates = generateDatesFromStartOfYear();
-const today = dayjs();
 
-type Summary = Array<{
+type SummaryEntry = {
     id: string,
     date: string,
     amount: number,
     completed: number,
-}>;
+};
 
 export function SummaryTable() {
-    const [summary, setSummary] = useState<Summary>();
+    const [summary, setSummary] = useState<SummaryEntry[]>();
 
     useEffect(() => {
         api.get('api/summary')
@@ -40,13 +39,13 @@ export function SummaryTable() {
             </div>
             <div className="grid grid-rows-7 grid-flow-col gap-3">
                 {
-                    summaryDates.map((date, i) => {
+                    summaryDates.length > 0 && summaryDates.map((date, i) => {
                         const dayInSummary = summary?.find(day => dayjs(date).isSame(day.date, 'day'))
                         return <HabitDay
                             key={`habitDay_${i}`}
                             date={date}
-                            amount={dayInSummary?.amount || 0}
-                            completed={dayInSummary?.completed || 0} />
+                            amount={dayInSummary?.amount}
+                            defaultCompleted={dayInSummary?.completed} />
                     })
                 }
             </div>
